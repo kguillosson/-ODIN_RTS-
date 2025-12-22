@@ -85,6 +85,13 @@ getMoving :: proc (vic_state_array :[max_vic]state_vic, nb_vic:u8, sld_state_arr
     }
     return return_set
 }
+getPassenger :: proc(sld_state_array: [max_sld]state_sld, nb_sld:u8)->unit_set{
+    return_set : unit_set
+    for i:u8=0; i<nb_sld; i+=1{
+        if sld_state_array[i]==.passenger do return_set += {i+max_vic}
+    }
+    return return_set
+}
 
 
 

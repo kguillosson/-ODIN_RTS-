@@ -3,6 +3,13 @@ package main
 import rl "vendor:raylib"
 
 
+check_button :: proc(mouse_pos : rl.Vector2, button_slice : []button_struct)->(idx:u8, found:bool){
+    for button, idx in button_slice{
+        if rl.CheckCollisionPointRec(mouse_pos, button.pos) do return u8(idx), true
+    }
+    return 0, false
+}
+
 mouseSelection :: proc(drag_start, drag_stop:rl.Vector2, pos_array : [max_sld+max_vic]rl.Vector2, selection_bitset:unit_set, nb_sld, nb_vic:u8)->(new_selection_bitset:unit_set){
     /*
     This function is called on left mouse release to update the selection bitset

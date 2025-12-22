@@ -20,7 +20,18 @@ rad2deg :: proc(rad:f32)->(deg:f32){
     return
 }
 
+deg2rad :: proc(deg:f32)->(rad:f32){
+    rad = math.PI*deg/180
+    return
+}
+
 anglefromVect :: proc(vec:rl.Vector2)->f32{//gives result in rad
     return math.atan2_f32(vec.y, vec.x)
 
+}
+
+myVector2Rotate :: proc(vec:rl.Vector2, angle:f32)->rl.Vector2{
+    length := rl.Vector2Length(vec)
+    new_vec:rl.Vector2={math.cos(angle), math.sin(angle)}*length
+    return new_vec
 }

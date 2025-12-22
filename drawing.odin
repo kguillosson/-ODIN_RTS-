@@ -4,6 +4,13 @@ import rl "vendor:raylib"
 import "core:math"
 import "core:fmt"
 
+/*
+This files centralises the functions used to display stuff to the screen, as well as the particle system 
+*/
+
+
+
+
 drawThingsFromAtlas :: proc(positions : []rl.Vector2, angles :[]f32, atlas : rl.Texture2D, texture_size:f32){
     assert(len(positions)==len(angles), "Didn't pass same length slices")
     for i:=0; i<len(positions); i+=1{
@@ -95,4 +102,27 @@ initMoveParticle :: proc(pos:rl.Vector2, time: f32)->particle{
     return output
 }
 
+
+
+drawButtont :: proc(button : button_struct){
+    rl.DrawRectangleRec(button.pos, button.color) 
+    textwidth := rl.MeasureText(button.label, button.fontsize)
+    diff :=i32(button.width)-textwidth
+    rl.DrawText(button.label, i32(button.x)+diff/2, i32(button.y)+(i32(button.height)-button.fontsize)/2, button.fontsize, rl.BLACK)
+}
+
+
+drawButtonHighlight :: proc(button : button_struct, highlight_color:rl.Color, highlight_width:f32){
+    rl.DrawRectangleRec(button.pos, highlight_color) 
+    updated_rect:rl.Rectangle={
+        button.x+highlight_width,
+        button.y+highlight_width,
+        button.width-2*highlight_width,
+        button.height-2*highlight_width,
+    }
+    rl.DrawRectangleRec(updated_rect, button.color) 
+    textwidth := rl.MeasureText(button.label, button.fontsize)
+    diff :=i32(button.width)-textwidth
+    rl.DrawText(button.label, i32(button.x)+diff/2, i32(button.y)+(i32(button.height)-button.fontsize)/2, button.fontsize, rl.BLACK)
+}
 
