@@ -19,12 +19,27 @@ state_vic :: enum u8{
     moving = 1, 
 }
 
+state_common :: enum u8{
+    idle = 0,
+    moving = 1,
+}
+
+state :: struct #raw_union {
+    sld:state_sld,
+    vic:state_vic,
+    comm:state_common
+}
+
 unit_type ::enum u8{
     any_type = 0, 
     soldier = 1,
     vehicle = 2
 
 }
+
+    drag_select_threshold :f32:10
+    selection_treshold :f32:50
+
     max_sld :u8:32
     max_vic :u8:8
 
@@ -35,7 +50,28 @@ unit_type ::enum u8{
     empty_unit_set:unit_set:{}
 
 move_task :: rl.Vector2
-    
+
+
+particle :: union{
+    move_particle
+}
+
+move_particle :: struct{
+    pos : rl.Vector2,
+    time : f32,
+
+}
+
+mouse_interaction_enum :: enum{
+    lmb_held,
+    lmb_release,
+    shift_held,
+    rmb,
+}
+
+mouse_interaction_set :: bit_set[mouse_interaction_enum]
+
+
 main::proc(){
     
     screen_width :i32= 1200
@@ -49,13 +85,15 @@ main::proc(){
     fkounter :f32=0
 
     //common data :
-    pos_array :[40]rl.Vector2
-    angle_array:[40]f32
-    task_array:[40]move_task
+    pos_array :[max_sld+max_vic]rl.Vector2
+    angle_array:[max_sld+max_vic]f32
+    task_array:[max_sld+max_vic]move_task
 
     //type specific data : 
     state_array_vic:[8] state_vic
     state_array_sld:[32] state_sld
+
+    state_array:[max_sld+max_vic]state
 
     //init a soldier and vic
     pos_array[0] = {500, 500}
@@ -65,14 +103,22 @@ main::proc(){
     nb_sld = 2
     
     selection_set :unit_set
-    selection_array :[40]u8
+    interaction_set :mouse_interaction_set
+
     nb_selected :u8=0
-    selection_treshold :f32=50
     
+    move_particle_lifetime:f32=1
 
 
-    drag_start_pos :rl.Vector2
-    drag_in_progress :bool
+    select_drag_start_pos :rl.Vector2
+    select_drag_in_progress :bool
+
+    task_drag_in_progress :bool
+    task_drag_start_pos :rl.Vector2
+
+    //particle dynamic array creation
+
+    prt_array := make([dynamic]particle, 0, 64)
 
     rl.InitWindow(screen_width, screen_height, "game")//init the window
 
@@ -90,101 +136,57 @@ main::proc(){
         
         mouse_pos :=rl.GetMousePosition()
 
-        if rl.IsMouseButtonPressed(.LEFT){
-            drag_in_progress = true
-            drag_start_pos = mouse_pos
+        if rl.IsMouseButtonPressed(.LEFT){//get the point where we started to drag an set the flag
+            select_drag_in_progress = true
+            select_drag_start_pos = mouse_pos
         }
-        //actions on leftclick release
-        if rl.IsMouseButtonReleased(.LEFT){
 
-            if rl.Vector2Distance(drag_start_pos, mouse_pos)<10{//this is considered a simple click on screen
-                found, idx_selected := selectNearMouse(mouse_pos, .any_type, pos_array, selection_treshold, nb_sld, nb_vic)
-                
-                if !found {
-                    /*for unit_idx in selection_array[0:nb_selected]{
-                        task_array[unit_idx] = mouse_pos//give movement task
-
-                        if unit_idx <max_vic do state_array_vic[unit_idx]=.moving
-                        
-                        else do state_array_sld[unit_idx-max_vic] = .moving
-
-                        angle_array[unit_idx] = rad2deg(anglefromVect(mouse_pos-pos_array[unit_idx]))
-                    }*/
-                    for unit_idx in selection_set{
-                        task_array[unit_idx] = mouse_pos//give movement task
-
-                        if unit_idx <max_vic do state_array_vic[unit_idx]=.moving
-                        
-                        else do state_array_sld[unit_idx-max_vic] = .moving
-
-                        angle_array[unit_idx] = rad2deg(anglefromVect(mouse_pos-pos_array[unit_idx]))
-                    }
+        if rl.IsMouseButtonPressed(.RIGHT){
+            task_drag_in_progress = true
+            task_drag_start_pos = mouse_pos
+        }
 
 
-                    selection_set &=empty_unit_set
-                    nb_selected = 0
+        if rl.IsMouseButtonReleased(.LEFT) do selection_set = mouseSelection(select_drag_start_pos, mouse_pos, pos_array, selection_set, nb_sld, nb_vic)
 
-                } //assign movement since you didn't click on anything
-                else{
-                    if rl.IsKeyDown(.LEFT_SHIFT){
-                        selection_set += {idx_selected}
-                        selection_array[nb_selected]=idx_selected
-                        nb_selected+=1
-                    }
-                    else{
-                        selection_set &= empty_unit_set
-                        selection_set += {idx_selected}
-                        selection_array[0]=idx_selected
-                        nb_selected=1
-                    }
+        if rl.IsMouseButtonReleased(.RIGHT){
+            if card(selection_set)==1{
+                for unit_idx in selection_set{
+                    task_array[unit_idx]=mouse_pos
+                    append(&prt_array, initMoveParticle(mouse_pos, move_particle_lifetime))
+
+                    if unit_idx <max_vic do state_array_vic[unit_idx]=.moving
+                    else do state_array_sld[unit_idx-max_vic] = .moving
+
+                    angle_array[unit_idx] = rad2deg(anglefromVect(mouse_pos-pos_array[unit_idx]))
                 }
-                
+                selection_set&={}
             }
-            else {//here we suppose some dragging action occured
-                if drag_in_progress {
-                    if (card(selection_set)>1 && !rl.IsKeyDown(.LEFT_SHIFT)){//here we will task units to move towards points equidistants on the dragged line
-                        drag_vctr := mouse_pos - drag_start_pos
-                        length:=rl.Vector2Length(drag_vctr)
-                        u_hat := rl.Vector2Normalize(drag_vctr)/*
-                        for unit_idx, i in selection_array[0:nb_selected]{
-                            task_array[unit_idx] = drag_start_pos + f32(i)*length/f32(i-1) * u_hat
+            else if card(selection_set)>1{
+                drag_vctr := mouse_pos - task_drag_start_pos
+                length:=rl.Vector2Length(drag_vctr)
+                u_hat := rl.Vector2Normalize(drag_vctr)
+                fkounter=0
+                for unit_idx in selection_set{
+                    
+                    task_array[unit_idx] = task_drag_start_pos + fkounter*length/f32(card(selection_set)-1) * u_hat
+                    append(&prt_array, initMoveParticle(task_array[unit_idx], move_particle_lifetime))
+                    fkounter+=1
+                    if unit_idx <max_vic do state_array_vic[unit_idx]=.moving   //  \
+                                                                                //  | some work is maybe required to simplify this
+                    else do state_array_sld[unit_idx-max_vic] = .moving         //  /
 
-                            if unit_idx <max_vic do state_array_vic[unit_idx]=.moving   //  \
-                                                                                        //  | some work is maybe required to simplify this
-                            else do state_array_sld[unit_idx-max_vic] = .moving         //  /
-
-                            
-                        }*/
-                        fkounter=0
-                        for unit_idx in selection_set{
-                            task_array[unit_idx] = drag_start_pos + fkounter*length/f32(card(selection_set)-1) * u_hat
-                            fkounter+=1
-                            if unit_idx <max_vic do state_array_vic[unit_idx]=.moving   //  \
-                                                                                        //  | some work is maybe required to simplify this
-                            else do state_array_sld[unit_idx-max_vic] = .moving         //  /
-
-                            angle_array[unit_idx] = rad2deg(anglefromVect(task_array[unit_idx]-pos_array[unit_idx]))
-                        }
-                        selection_set&={}
-                        nb_selected = 0 // clear the selction array
-                        fmt.printfln("nb_soldier : %d, nb_vic : %d", nb_sld, nb_vic)
-                        
-                    }
-                    else {
-                        if card(selection_set)==0 || rl.IsKeyDown(.LEFT_SHIFT) do selection_set += selectInBox(drag_start_pos, mouse_pos, pos_array)
-
-                    }
+                    angle_array[unit_idx] = rad2deg(anglefromVect(task_array[unit_idx]-pos_array[unit_idx]))
                 }
-            }
-        }
-        if nb_selected>0 && rl.IsMouseButtonPressed(.RIGHT){
-            for unit_idx in selection_set{
-                angle_array[unit_idx] = rad2deg(anglefromVect(mouse_pos-pos_array[unit_idx]))
-                //fmt.println(angle_array[unit_idx])
+                selection_set&={}
             }
         }
 
-        drag_in_progress = drag_in_progress && rl.IsMouseButtonDown(.LEFT)
+
+       
+
+        select_drag_in_progress = select_drag_in_progress && rl.IsMouseButtonDown(.LEFT)
+        task_drag_in_progress = task_drag_in_progress && rl.IsMouseButtonDown(.RIGHT)
         
         //unit ticking 
         /*
@@ -219,12 +221,12 @@ main::proc(){
         drawVics(pos_array[0:nb_vic], angle_array[0:nb_vic], atlas_vic)
         drawSlds(pos_array[max_vic:max_vic+nb_sld], angle_array[max_vic:max_vic+nb_sld], atlas_sld)
        
-        //if drag_in_progress do drawSelectionBox(selection_box_start_pos, mouse_pos)
-        if drag_in_progress && (card(selection_set)==0 || rl.IsKeyDown(.LEFT_SHIFT)){
-            drawSelectionBox(drag_start_pos, mouse_pos)
+        //if select_drag_in_progress do drawSelectionBox(selection_box_start_pos, mouse_pos)
+        if select_drag_in_progress && (card(selection_set)==0 || rl.IsKeyDown(.LEFT_SHIFT)){
+            drawSelectionBox(select_drag_start_pos, mouse_pos)
         }
 
-        if (drag_in_progress && card(selection_set)>1 && !rl.IsKeyDown(.LEFT_SHIFT)) do drawMoveLine(drag_start_pos, mouse_pos, card(selection_set))
+        if (task_drag_in_progress && card(selection_set)>1 ) do drawMoveLine(task_drag_start_pos, mouse_pos, card(selection_set))
 
         for unit_idx in selection_set{
             type:unit_type =.soldier
@@ -232,7 +234,19 @@ main::proc(){
             highlight(pos_array[unit_idx], type)
         }
         
+        //particle drawing
+        for i :=0; i<len(prt_array); i+=1{
+            del_prt:bool
+            prt_array[i], del_prt = drawParticle(prt_array[i], delta_t)
+            if del_prt{
+                unordered_remove(&prt_array, i)
+                i-=1
+            }
+        }
         
         rl.EndDrawing()
     }
+    rl.UnloadTexture(atlas_sld)
+    rl.UnloadTexture(atlas_vic)
+
 }

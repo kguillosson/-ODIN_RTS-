@@ -77,13 +77,22 @@ drawMoveLine :: proc(origin, current:rl.Vector2, nb_selected:int){
 
 
 
-/*        if (drag_in_progress && card(selection_set)>1 && !rl.IsKeyDown(.LEFT_SHIFT)){
-            drag_vctr := mouse_pos - drag_start_pos
-            length:=rl.Vector2Length(drag_vctr)
-            u_hat := rl.Vector2Normalize(drag_vctr)
-            rl.DrawLineEx(drag_start_pos, mouse_pos, 1, rl.RED)
-            for i:u8=0; i<nb_selected; i+=1{
-                rl.DrawCircleV(drag_start_pos + f32(i)*length/f32(nb_selected-1) * u_hat, 5, rl.RED)
-            }
-        }
-*/
+drawParticle :: proc (particle2draw : particle, delta_t:f32) -> (updated_particle:particle, del:bool){
+    updated_particle=particle2draw
+    switch &prt in updated_particle {
+        case move_particle:
+            rl.DrawCircleLinesV(prt.pos, 3, rl.YELLOW)
+            prt.time-=delta_t
+            return prt, prt.time<=0
+            
+
+    }
+    return
+}
+
+initMoveParticle :: proc(pos:rl.Vector2, time: f32)->particle{
+    output:particle=move_particle({pos, time})
+    return output
+}
+
+
