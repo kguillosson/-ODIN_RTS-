@@ -22,10 +22,15 @@ The (ambitious) objective is a platoon scale tactics game where you fight agains
 - Make vics not work if they don't have a driver
 - Make weapons (like crewed stuff) that reuse some of the vic code
 
-## long term Goals:
+## Long term Goals:
 
 - Find a way to store read only data outside of my code, might use JSON, or learn how to parse a text file in ODIN and make a crappy config file format
 - Add enemies
 - Make an elevation system used to compute LOS / affect mvt speed
 - Make terrains that affect things like LOS / mvt speed
 - Missions
+
+
+
+
+ If you want to try this, I recommend installing ODIN  (https://odin-lang.org/), navigating to the folder where you've cloned this repo and running the command "odin run ."
