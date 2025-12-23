@@ -24,6 +24,28 @@ selectNearMouse :: proc(mouse_pos:rl.Vector2, type2find :unit_type, pos_array:[4
     return
 }
 
+newSelectNearMouse :: proc(mouse_pos: rl.Vector2, type2find :enum_type, array_data:[]common_data, selection_treshold:f32)->(bool, u8){
+    /*
+    the type2find parameter can restrict to a single type if we pass said type, if we pass none then it will look for any type
+    */
+
+    switch type2find{
+        case .none:
+            for data, idx in array_data{
+                if data.type!=.none && rl.Vector2Distance(mouse_pos, data.pos)<selection_treshold do return true, u8(idx) 
+            }
+        case .sld:
+            for data, idx in array_data{
+                if data.type==.sld && rl.Vector2Distance(mouse_pos, data.pos)<selection_treshold do return true, u8(idx) 
+            }
+        case .vic:
+            for data, idx in array_data{
+                if data.type==.vic && rl.Vector2Distance(mouse_pos, data.pos)<selection_treshold do return true, u8(idx) 
+            }
+    }
+    return false, 0
+}
+
 /*
 selectInBox :: proc (orig, current :rl.Vector2, pos_array:[40]rl.Vector2, nb_sld, nb_vic, nb_selected :u8, selection_array:[40]u8)->(u8, [40]u8){
     new_selection_array:=selection_array
@@ -58,6 +80,14 @@ selectInBox ::proc(orig, current:rl.Vector2, pos_array:[40]rl.Vector2,)->(unit_s
         if rl.CheckCollisionPointRec(pos_array[i], rect) do ret_set+={i}
     }
     return ret_set
+}
+
+newSelectInBox :: proc(start, end :rl.Vector2, array_data:[]common_data)->(return_set:unit_set){
+    rect:=rectFrom2Vector2(start, end)
+    for data, idx in array_data{
+        if rl.CheckCollisionPointRec(data.pos, rect) do return_set+={u8(idx)}
+    }
+    return
 }
 
 selectInSlice :: proc(mouse_pos :rl.Vector2, pos_slice :[]rl.Vector2, selection_treshold :f32, nb_thing, first_valid_idx :u8)->(found:bool, idx :u8){

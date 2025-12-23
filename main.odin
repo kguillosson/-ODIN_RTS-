@@ -1,4 +1,4 @@
-#+feature global-context
+//#+feature global-context
 
 package main
 
@@ -113,6 +113,39 @@ truck_angle_array :=[6]f32{
     -90
 }
 
+//New data structure: we wil use a common data struct for shared things, and specialised data containers for the diverse types (ie. slds, vics...)
+
+enum_state :: enum u8{
+    /*
+    This enum is meant to inform us about what a unit is doing
+    */
+    inactive = 0,   //used for vics w/out a driver, or for unused slds slots
+    idle = 1,       //tells us there is no current task
+    moving = 2,
+    crewing = 3,    //only for slds
+    passenger = 4,  //same
+
+
+}
+
+enum_type :: enum u8{
+    none =0,
+    sld = 1,
+    vic = 2,
+}
+
+common_data :: struct{
+    using pos :rl.Vector2,  // in px
+    angle :f32,             // in degrees
+    task_ptr :u8,           // points to the current task in the array_task_current
+    type_ptr :u8,           // points to the unit data in it's type specific array
+    state :enum_state,      // what the unit is doing
+    type :enum_type,        // what the unit is
+}
+
+
+
+
 main::proc(){
 
     //data initialisation
@@ -165,6 +198,19 @@ main::proc(){
     task_drag_in_progress :bool
     task_drag_start_pos :rl.Vector2
 
+
+    //new data structure definition
+    array_data_common :[40]common_data
+
+    array_data_common[0]={
+        {700,200},
+        0,
+        0,
+        0,
+        .idle,
+        .vic
+    }
+
     //buttons definition
     //interaction_mode_buttons
     interaction_mode_state : interaction_mode = .move
@@ -203,7 +249,7 @@ main::proc(){
 
     atlas_sld :rl.Texture2D=rl.LoadTexture("atlas fren.png")
     atlas_vic :rl.Texture2D=rl.LoadTexture("truck.png")
-
+    atlas :rl.Texture2D=rl.LoadTexture("atlas.png")
 
     //game loop
 
@@ -376,6 +422,8 @@ main::proc(){
         //draw units
         drawVics(pos_array[0:nb_vic], angle_array[0:nb_vic], atlas_vic)
         drawSlds(pos_array[max_vic:max_vic+nb_sld], angle_array[max_vic:max_vic+nb_sld], atlas_sld)
+
+        newDrawThingFromAtlas(array_data_common[:], atlas)
        
         //if select_drag_in_progress do drawSelectionBox(selection_box_start_pos, mouse_pos)
         if select_drag_in_progress {

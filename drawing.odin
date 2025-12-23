@@ -8,7 +8,22 @@ import "core:fmt"
 This files centralises the functions used to display stuff to the screen, as well as the particle system 
 */
 
-
+newDrawThingFromAtlas :: proc(data:[]common_data, atlas:rl.Texture2D){
+    for i:=0; i<len(data); i+=1{
+        //get the texture size we want to display
+        draw_from:rl.Rectangle
+        switch data[i].type{//will be replaced with a map in the future 
+            case .none:
+                continue
+            case .sld:
+                draw_from = {0,0, 64,64}
+            case .vic:
+                draw_from = {0,64, 128,128}
+        }
+        draw_to:rl.Rectangle = {data[i].x, data[i].y, draw_from.width, draw_from.height}
+        rl.DrawTexturePro(atlas, draw_from, draw_to, {draw_from.width/2, draw_from.height/2}, data[i].angle ,rl.WHITE)
+    }
+}
 
 
 drawThingsFromAtlas :: proc(positions : []rl.Vector2, angles :[]f32, atlas : rl.Texture2D, texture_size:f32){
