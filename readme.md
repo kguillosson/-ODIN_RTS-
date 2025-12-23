@@ -30,6 +30,9 @@ The (ambitious) objective is a platoon scale tactics game where you fight agains
 - Make terrains that affect things like LOS / mvt speed
 - Missions
 
+## Experimental status:
+
+- This branch is experimental, currently it's used to rebuild the data structures away from a collection fo arrays for each datatype, to a split between an array containing common data (pos, angle, type...) and extra arrays for specific things, like occupancy of vics...
 
 
 
