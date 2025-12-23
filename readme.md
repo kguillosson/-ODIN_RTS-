@@ -34,3 +34,5 @@ The (ambitious) objective is a platoon scale tactics game where you fight agains
 
 
  If you want to try this, I recommend installing ODIN  (https://odin-lang.org/), navigating to the folder where you've cloned this repo and running the command "odin run ."
+
+ Many thanks to the ODIN language and Raylib Authors for the seamless developpement experience
