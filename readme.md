@@ -33,6 +33,7 @@ The (ambitious) objective is a platoon scale tactics game where you fight agains
 ## Experimental status:
 
 - This branch is experimental, currently it's used to rebuild the data structures away from a collection fo arrays for each datatype, to a split between an array containing common data (pos, angle, type...) and extra arrays for specific things, like occupancy of vics...
+- the second objective is a remake of the task system to allow for several task to be completed sequentially, I might add conditionnal stuff in the progression to allow for complex task with minimal user involvement (ex: unit A will only start moving once unit B has stopped moving
 
 
 
