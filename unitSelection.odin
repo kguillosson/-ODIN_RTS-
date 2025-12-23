@@ -44,6 +44,16 @@ newSelectNearMouse :: proc(mouse_pos: rl.Vector2, type2find :enum_type, array_da
             }
     }
     return false, 0
+
+    
+}
+
+SelectNearMouse :: proc(mouse_pos :rl.Vector2, array_data :[]common_data, selection_treshold :f32, set:unit_set)->(bool, u8){
+    //finds a unit that is near the mouse and in set
+    for idx in set{
+        if rl.Vector2Distance(array_data[idx].pos, mouse_pos)<selection_treshold do return true, idx
+    }
+    return false, 0
 }
 
 /*
@@ -90,6 +100,17 @@ newSelectInBox :: proc(start, end :rl.Vector2, array_data:[]common_data)->(retur
     return
 }
 
+SelectInBox :: proc(start, end :rl.Vector2, array_data:[]common_data, set :unit_set)->(return_set:unit_set){
+    /*
+    selects units that are in the selection box and in 'set'
+    */
+    rect:=rectFrom2Vector2(start, end)
+    for idx in set{
+        if rl.CheckCollisionPointRec(array_data[idx].pos, rect) do return_set +={idx}
+    }
+    return
+}
+
 selectInSlice :: proc(mouse_pos :rl.Vector2, pos_slice :[]rl.Vector2, selection_treshold :f32, nb_thing, first_valid_idx :u8)->(found:bool, idx :u8){
     for i:u8=0; i<nb_thing; i+=1{
         if rl.Vector2Distance(mouse_pos, pos_slice[i])<selection_treshold{
@@ -100,7 +121,8 @@ selectInSlice :: proc(mouse_pos :rl.Vector2, pos_slice :[]rl.Vector2, selection_
 }
 
 //select from state
-
+/* 
+//ain't at the point where I'll need that
 getMoving :: proc (vic_state_array :[max_vic]state_vic, nb_vic:u8, sld_state_array :[max_sld]state_sld, nb_sld:u8)->(unit_set){
     return_set:unit_set
     for i:u8=0; i<nb_vic; i+=1{
@@ -122,7 +144,7 @@ getPassenger :: proc(sld_state_array: [max_sld]state_sld, nb_sld:u8)->unit_set{
     }
     return return_set
 }
-
+*/
 
 
 

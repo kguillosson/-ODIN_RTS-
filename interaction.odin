@@ -42,7 +42,7 @@ mouseSelection :: proc(drag_start, drag_stop:rl.Vector2, pos_array : [max_sld+ma
 }
 
 
-newMouseSelection :: proc(drag_start, drag_stop : rl.Vector2, array_data :[]common_data, selection_bitset:unit_set)->(new_selection_bitset:unit_set){
+MouseSelection :: proc(drag_start, drag_stop : rl.Vector2, array_data :[]common_data, selection_bitset, set:unit_set)->(new_selection_bitset:unit_set){
     /*
     This function is called on left mouse release to update the selection bitset
 
@@ -64,7 +64,7 @@ newMouseSelection :: proc(drag_start, drag_stop : rl.Vector2, array_data :[]comm
 
     }
     else{                                                                   //(III)
-        new_selection_bitset = newSelectInBox(drag_start, drag_stop, array_data)
+        new_selection_bitset = SelectInBox(drag_start, drag_stop, array_data, set)
     }
 
 

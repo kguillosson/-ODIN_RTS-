@@ -8,28 +8,6 @@ import sa "core:container/small_array"
 
 
 
-state_sld :: enum u8{
-    idle = 0,
-    moving = 1,
-    passenger = 2,
-}
-
-state_vic :: enum u8{
-    idle = 0,
-    moving = 1, 
-}
-
-state_common :: enum u8{
-    idle = 0,
-    moving = 1,
-}
-
-state :: struct #raw_union {
-    sld:state_sld,
-    vic:state_vic,
-    comm:state_common
-}
-
 unit_type ::enum u8{
     any_type = 0, 
     soldier = 1,
@@ -46,9 +24,9 @@ unit_type ::enum u8{
     mvt_speed_sld :f32=40
     mvt_speed_vic :f32=60
 
-    unit_set::bit_set[0..<max_sld+max_vic]
+    unit_set::bit_set[0..<max_units]
     empty_unit_set:unit_set:{}
-    vic_set :unit_set:{0, 1, 2, 3, 4, 5, 6, 7}
+
 
 move_task :: rl.Vector2
 crew_task :: struct{
@@ -143,8 +121,8 @@ common_data :: struct{
     type :enum_type,        // what the unit is
 }
 
-
-
+max_units :u8:40
+max_tasks :u16:512
 
 main::proc(){
 
@@ -166,11 +144,11 @@ main::proc(){
     task_array:[max_sld+max_vic]task
 
     //type specific data : 
-    state_array_vic:[8] state_vic
-    state_array_sld:[32] state_sld
+    //state_array_vic:[8] state_vic
+    //state_array_sld:[32] state_sld
 
-    state_array:[max_sld+max_vic]state
-    vic_crew_array:[max_vic]truck_crew_struct
+    //state_array:[max_sld+max_vic]state
+    //vic_crew_array:[max_vic]truck_crew_struct
     
 
     //init a soldier and vic
@@ -200,7 +178,7 @@ main::proc(){
 
 
     //new data structure definition
-    array_data_common :[40]common_data
+    array_data_common :[max_units]common_data
 
     array_data_common[0]={
         {700,200},
@@ -208,8 +186,27 @@ main::proc(){
         0,
         0,
         .idle,
-        .vic
+        .sld
     }
+
+    is_unit, is_sld, is_vic := makeSets(array_data_common[:])
+
+    array_current_task :[max_units]container_task_data
+    array_future_task := make([dynamic]container_future_task_data, 0, max_tasks)
+    defer delete(array_future_task)
+    array_buffer_task :[max_units]union_future_task_data
+    set_buffer :unit_set
+
+
+
+
+
+    //this seems like a good place to do the file reading thing
+    type2speed :=make(map[enum_type]f32)
+    defer delete(type2speed)
+    type2speed[.sld] = 40
+    type2speed[.vic] = 80
+
 
     //buttons definition
     //interaction_mode_buttons
@@ -247,8 +244,8 @@ main::proc(){
 
     rl.InitWindow(screen_width, screen_height, "game")//init the window
 
-    atlas_sld :rl.Texture2D=rl.LoadTexture("atlas fren.png")
-    atlas_vic :rl.Texture2D=rl.LoadTexture("truck.png")
+    //atlas_sld :rl.Texture2D=rl.LoadTexture("atlas fren.png")
+    //atlas_vic :rl.Texture2D=rl.LoadTexture("truck.png")
     atlas :rl.Texture2D=rl.LoadTexture("atlas.png")
 
     //game loop
@@ -257,9 +254,11 @@ main::proc(){
     
     for !rl.WindowShouldClose(){
 
-        //selection 
-        //get the mouse data
+        
+        //get some data
         mouse_pos :=rl.GetMousePosition()
+        delta_t :=rl.GetFrameTime()
+        is_unit, is_sld, is_vic = makeSets(array_data_common[:])
 
         if rl.IsMouseButtonPressed(.LEFT){
             select_drag_in_progress = true
@@ -275,94 +274,89 @@ main::proc(){
         if rl.IsMouseButtonReleased(.LEFT) {
             idx, found := check_button(mouse_pos, interaction_mode_buttons_array[:])
             if found do interaction_mode_state = interaction_mode(idx)
-            else do selection_set = mouseSelection(select_drag_start_pos, mouse_pos, pos_array, selection_set, nb_sld, nb_vic)
+            else do selection_set = MouseSelection(select_drag_start_pos, mouse_pos, array_data_common[:], selection_set, is_unit)
             for sld_idx:u8=0; sld_idx<nb_sld; sld_idx+=1{
-                if state_array_sld[sld_idx]==.passenger do selection_set-={sld_idx+max_vic}
+                if array_data_common[sld_idx].state==.passenger do selection_set-={sld_idx+max_vic}
             }
         }
         //assign task relative to the interaction state
-    if rl.IsMouseButtonReleased(.RIGHT){
-        switch interaction_mode_state{
-            case .move:
-                if card(selection_set)==1{
-                    for unit_idx in selection_set{
-                        task_array[unit_idx].move=mouse_pos
-                        append(&prt_array, initMoveParticle(mouse_pos, move_particle_lifetime))
-
-                        if unit_idx <max_vic do state_array_vic[unit_idx]=.moving
-                        else do state_array_sld[unit_idx-max_vic] = .moving
-
-                        angle_array[unit_idx] = rad2deg(anglefromVect(mouse_pos-pos_array[unit_idx]))
-                    }
-                    selection_set&={}
-                }
-                else if card(selection_set)>1{
+        /*
+        NOTES:
+            Next objective is to make all this into a simple function to clean up the main,
+            but 4now imma make this work the ugly way to test stuff
+        */
+        if rl.IsMouseButtonReleased(.RIGHT) {
+            switch interaction_mode_state{
+                case .move:
+                    fkounter = 0
+                    N := f32(card(selection_set))+1
                     drag_vctr := mouse_pos - task_drag_start_pos
-                    length:=rl.Vector2Length(drag_vctr)
-                    u_hat := rl.Vector2Normalize(drag_vctr)
-                    fkounter=0
-                    for unit_idx in selection_set{
-                        
-                        task_array[unit_idx].move = task_drag_start_pos + fkounter*length/f32(card(selection_set)-1) * u_hat
-                        append(&prt_array, initMoveParticle(task_array[unit_idx].move, move_particle_lifetime))
-                        fkounter+=1
-                        if unit_idx <max_vic do state_array_vic[unit_idx]=.moving   //  \
-                                                                                    //  | some work is maybe required to simplify this
-                        else do state_array_sld[unit_idx-max_vic] = .moving         //  /
+                    drag_length := rl.Vector2Length(drag_vctr)
+                    drag_hat :=drag_vctr/drag_length
 
-                        angle_array[unit_idx] = rad2deg(anglefromVect(task_array[unit_idx].move-pos_array[unit_idx]))
+                    for selected_idx in selection_set{
+                        wishpos:rl.Vector2 = task_drag_start_pos + (fkounter*drag_length/N) * drag_hat
+                        array_buffer_task[selected_idx] = move_future_task_data{wishpos}
+                         
                     }
-                    selection_set&={}
-                }
-                
-            case .crew:
-                found, idx := selectNearMouse(mouse_pos, .vehicle, pos_array, selection_treshold, nb_sld, nb_vic)
-                if found{
-                    selection_set -= vic_set
+                    
+                case .crew:
+                case .point: //used for debugging stuff, will be replaced with a proper overwatch system
+                case .uncrew:
+            }
+            for selected_idx in set_buffer{
+                if rl.IsKeyDown(.LEFT_CONTROL){ //check if we want to put this task after the current ones
+                    if type_of(array_current_task[selected_idx].data) == empty_task_data{
+                        array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common[:], selected_idx),  2*max_tasks, array_data_common[selected_idx].type}
+                    }
+                    else{//we need to find a spot to store the next task
+                        nb_future_tasks := u16(len(array_future_task))
+                        if array_current_task[selected_idx].idx>max_tasks{//check if !the current array points to a future task 
+                            append(&array_future_task, container_future_task_data{array_buffer_task[selected_idx],  2*max_tasks, u16(selected_idx), true, array_data_common[selected_idx].type})
+                            array_current_task[selected_idx].idx = nb_future_tasks
 
-                    if card(selection_set)<=6-card(vic_crew_array[idx].occupancy){
-                        for sld_idx in selection_set{
-
-                            state_array_sld[sld_idx-max_vic]=.passenger
-                            if 0 not_in vic_crew_array[idx].occupancy{
-                                vic_crew_array[idx].driver=sld_idx
-                                vic_crew_array[idx].occupancy+={0}
-                                task_array[sld_idx].crew.vic2crew=idx
-                                task_array[sld_idx].crew.slot=0
-                            }
-                            else{
-                                for i:=1; i<6; i+=1{
-                                    if (i not_in vic_crew_array[idx].occupancy){
-                                        vic_crew_array[idx].passenger[i-1]=sld_idx
-                                        vic_crew_array[idx].occupancy+={i}
-                                        task_array[sld_idx].crew.vic2crew=idx
-                                        task_array[sld_idx].crew.slot=u8(i)
-                                        break
-                                    }
-                                }
-                            }
                         }
-                        selection_set&={}
+                        else if nb_future_tasks<max_tasks{
+                            new_idx := array_current_task[selected_idx].idx
+                            old_idx := u16(selected_idx)
+                            for new_idx<=max_tasks{// here we search for the first generic_task_data that has a next task idx > max_tasks
+                                old_idx=new_idx
+                                new_idx = array_future_task[old_idx].next_idx
+                            }
+                            append(&array_future_task, container_future_task_data{array_buffer_task[selected_idx],  2*max_tasks, old_idx, false, array_data_common[selected_idx].type})
+                            array_future_task[old_idx].next_idx = nb_future_tasks
+
+                            
+                        }
+                        else do fmt.printfln("failed to add task, future_task_array has %d of %d slots used", nb_future_tasks, max_tasks)
+                        
+
                     }
+                    
                 }
-            case .point:
-                for unit_idx in selection_set{
-                    angle_array[unit_idx]=rad2deg(anglefromVect(mouse_pos-pos_array[unit_idx]))
-                }
-            case .uncrew:
-                found, idx := selectNearMouse(mouse_pos, .vehicle, pos_array, selection_treshold, nb_sld, nb_vic)
-                if found {
-                    if  (0 in (vic_crew_array[idx].occupancy)){
-                        state_array_sld[vic_crew_array[idx].driver-max_vic]=.idle
-                        vic_crew_array[idx].occupancy -= {0}
+                else{
+                    new_idx := array_current_task[selected_idx].idx
+                    old_idx := u16(selected_idx)
+                    for new_idx<max_tasks{// here we iterate over the chain of tasks and unordered remove them as we encounter them
+                        old_idx=new_idx
+                        new_idx = array_future_task[old_idx].next_idx
+                        last_task_prev_idx:u16
+                        if old_idx != u16(len(array_future_task)-1) {// if we are deleting the last
+
+                            last_task_prev_idx = array_future_task[len(array_future_task)-1].prev_idx //get the idx of the task that pointed to the last task
+                            array_future_task[last_task_prev_idx].next_idx = old_idx //give the new idx of the next task
+                            unordered_remove(&array_future_task, old_idx)
+                            
+                        }
+                        else do pop(&array_future_task)
+                        
                     }
-                    for i in vic_crew_array[idx].occupancy{
-                        state_array_sld[vic_crew_array[idx].passenger[i-1]-max_vic]=.idle
-                        vic_crew_array[idx].occupancy -= {i}
-                    }
+                    //overwrite the current task
+                    array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common[:], selected_idx), 2*max_tasks, array_data_common[selected_idx].type}// 2*max_tasks is used to tell the system there is no future task
                 }
+                set_buffer -={selected_idx}
+            }
         }
-    }
 
 
        
@@ -371,40 +365,52 @@ main::proc(){
         task_drag_in_progress = task_drag_in_progress && rl.IsMouseButtonDown(.RIGHT)
         
         //unit ticking 
+        
         /*
-        Might redo this with specific dynamic arrays for each task, allowing to iterate over the units without having to skip units with other tasks
+        Three steps:
+            I   iterate over array_current_task, ticking the task_data as it comes 
+            II  update the relative data in the units data (ex: update position)
+            III if any task is over && it points in array_future_tasks, overwrite current task with the data pointed to and unordered remove it
+             
         */
-        delta_t:=rl.GetFrameTime()
-        //movement
-        moving_units := getMoving(state_array_vic, nb_vic, state_array_sld, nb_sld)
         
-        for mover_idx in moving_units{
-            //fmt.println(mover_idx)
-            mvt_vctr :rl.Vector2 = task_array[mover_idx].move - pos_array[mover_idx]
-            remaining_dist:f32=rl.Vector2Length(mvt_vctr)
-            step:f32
-            if mover_idx<max_vic do step = mvt_speed_vic*delta_t
-            else if mover_idx<max_vic+max_sld do step = mvt_speed_sld*delta_t
-
-            if step<remaining_dist{
-                pos_array[mover_idx]+=step*rl.Vector2Normalize(mvt_vctr)
-            }
-            else{
-                pos_array[mover_idx]=task_array[mover_idx].move
-                if mover_idx<max_vic do state_array_vic[mover_idx] = .idle
-                else if mover_idx<max_vic+max_sld do state_array_sld[mover_idx-max_vic] = .idle
+        // I
+        units2tick := getWithTask(array_current_task)
+        units_done :unit_set={}
+        for i in units2tick{
+            switch &v in array_current_task[i].data {
+                case empty_task_data:
+                    fmt.println("tried to tick a unit without task")
+                case move_task_data:
+                    mvt_vec := v.wish-v.current
+                    mvt_len := rl.Vector2Length(mvt_vec)
+                    mvt_hat :=mvt_vec/mvt_len
+                    step := delta_t*type2speed[array_current_task[i].type]
+                    if mvt_len<step {
+                         v.current = v.wish
+                         units_done +={i}//tell the engine that task associated with unit i is done
+                    }
+                    else do v.current +=mvt_hat*step
+                 
             }
         }
-        passengers :=getPassenger(state_array_sld, nb_sld)
 
-        for passenger_idx in passengers{
-            vic_idx := task_array[passenger_idx].crew.vic2crew
-            vic_pos := pos_array[vic_idx]
-            displaced_pos := rl.Vector2Rotate(truck_displacement_array[task_array[passenger_idx].crew.slot], deg2rad(angle_array[vic_idx]))+vic_pos
-            pos_array[passenger_idx]=displaced_pos
-            angle_array[passenger_idx]=angle_array[vic_idx]+truck_angle_array[task_array[passenger_idx].crew.slot]
+        // II
+        for i in units2tick{
+            switch &v in array_current_task[i].data {
+                case empty_task_data:
+                    fmt.println("tried to tick a unit without task")
+                case move_task_data:
+                    array_data_common[i].pos = v.current
+            }
         }
-        
+        // III
+        for i in units_done{
+
+        }
+
+
+
 
         rl.BeginDrawing()
         rl.ClearBackground({195, 237, 181, 255})
@@ -420,8 +426,8 @@ main::proc(){
 
 
         //draw units
-        drawVics(pos_array[0:nb_vic], angle_array[0:nb_vic], atlas_vic)
-        drawSlds(pos_array[max_vic:max_vic+nb_sld], angle_array[max_vic:max_vic+nb_sld], atlas_sld)
+        //drawVics(pos_array[0:nb_vic], angle_array[0:nb_vic], atlas_vic)
+        //drawSlds(pos_array[max_vic:max_vic+nb_sld], angle_array[max_vic:max_vic+nb_sld], atlas_sld)
 
         newDrawThingFromAtlas(array_data_common[:], atlas)
        
@@ -449,7 +455,7 @@ main::proc(){
 
         rl.EndDrawing()
     }
-    rl.UnloadTexture(atlas_sld)
-    rl.UnloadTexture(atlas_vic)
-
+    //rl.UnloadTexture(atlas_sld)
+    //rl.UnloadTexture(atlas_vic)
+    rl.UnloadTexture(atlas)
 }
