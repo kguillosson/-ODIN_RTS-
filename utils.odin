@@ -19,10 +19,5 @@ makeSets :: proc(array_data:[]common_data)->(unit_set, sld_set, vic_set :unit_se
 }
 
 
-getWithTask :: proc(current_tasks :[max_units]container_task_data)->(ret_set : unit_set){
-    for i:u8=0; i<max_units; i+=1{
-        if type_of(current_tasks[i].data) != empty_task_data do ret_set+={i}
-    }
-    return
-}
+
 

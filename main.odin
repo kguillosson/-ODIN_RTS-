@@ -188,6 +188,14 @@ main::proc(){
         .idle,
         .sld
     }
+    array_data_common[1]={
+        {600,200},
+        0,
+        0,
+        0,
+        .idle,
+        .sld
+    }
 
     is_unit, is_sld, is_vic := makeSets(array_data_common[:])
 
@@ -269,6 +277,14 @@ main::proc(){
             task_drag_in_progress = true
             task_drag_start_pos = mouse_pos
         }
+        //debug block
+        if rl.IsKeyPressed(.SPACE){
+            fmt.println(getWithTask(array_current_task))
+            for task_data, k in array_current_task{
+                if isActivetask(task_data) do fmt.println(task_data)
+            }
+        }
+
 
         //select units
         if rl.IsMouseButtonReleased(.LEFT) {
@@ -289,16 +305,33 @@ main::proc(){
             switch interaction_mode_state{
                 case .move:
                     fkounter = 0
-                    N := f32(card(selection_set))+1
+                    N := f32(card(selection_set))
                     drag_vctr := mouse_pos - task_drag_start_pos
                     drag_length := rl.Vector2Length(drag_vctr)
                     drag_hat :=drag_vctr/drag_length
-
-                    for selected_idx in selection_set{
-                        wishpos:rl.Vector2 = task_drag_start_pos + (fkounter*drag_length/N) * drag_hat
-                        array_buffer_task[selected_idx] = move_future_task_data{wishpos}
-                         
+                    if N==1 {
+                        for selected_idx in selection_set{
+                            wishpos:rl.Vector2 = mouse_pos
+                            array_buffer_task[selected_idx] = move_future_task_data{wishpos}
+                            fmt.printfln("tried to give move task to unit %d", selected_idx)
+                            fmt.print("future task created :")
+                            fmt.println(array_buffer_task[selected_idx])
+                            set_buffer+={selected_idx}
+                        }
                     }
+                    else{
+                        for selected_idx in selection_set{
+                            wishpos:rl.Vector2 = task_drag_start_pos + (fkounter*drag_length/(N+1)) * drag_hat
+                            fkounter+=1
+                            array_buffer_task[selected_idx] = move_future_task_data{wishpos}
+                            fmt.printfln("tried to give move task to unit %d", selected_idx)
+                            fmt.print("future task created :")
+                            fmt.println(array_buffer_task[selected_idx])
+                            set_buffer+={selected_idx}
+                        }
+                    }
+                    
+                    
                     
                 case .crew:
                 case .point: //used for debugging stuff, will be replaced with a proper overwatch system
@@ -306,26 +339,31 @@ main::proc(){
             }
             for selected_idx in set_buffer{
                 if rl.IsKeyDown(.LEFT_CONTROL){ //check if we want to put this task after the current ones
-                    if type_of(array_current_task[selected_idx].data) == empty_task_data{
-                        array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common[:], selected_idx),  2*max_tasks, array_data_common[selected_idx].type}
+                    if !isActivetask(array_current_task[selected_idx]){
+                        array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common, selected_idx),  2*max_tasks, array_data_common[selected_idx].type}
                     }
                     else{//we need to find a spot to store the next task
                         nb_future_tasks := u16(len(array_future_task))
-                        if array_current_task[selected_idx].idx>max_tasks{//check if !the current array points to a future task 
+                        if array_current_task[selected_idx].idx>max_tasks{//check if the current task has no future task
                             append(&array_future_task, container_future_task_data{array_buffer_task[selected_idx],  2*max_tasks, u16(selected_idx), true, array_data_common[selected_idx].type})
+                            //add the future task to the end of the array_future_tasks
                             array_current_task[selected_idx].idx = nb_future_tasks
+                            //set the next task 'pointer' of the current task to the added task
+                            fmt.print("current task next_task pointer set to :")
+                            fmt.println(array_current_task[selected_idx].idx)
 
                         }
                         else if nb_future_tasks<max_tasks{
                             new_idx := array_current_task[selected_idx].idx
                             old_idx := u16(selected_idx)
-                            for new_idx<=max_tasks{// here we search for the first generic_task_data that has a next task idx > max_tasks
+                            for new_idx<=max_tasks{// here we search for the first generic_task_data that has a next task idx > max_tasks (ie last in the chain)
                                 old_idx=new_idx
                                 new_idx = array_future_task[old_idx].next_idx
                             }
                             append(&array_future_task, container_future_task_data{array_buffer_task[selected_idx],  2*max_tasks, old_idx, false, array_data_common[selected_idx].type})
+                            //add the new task at the end of the array
                             array_future_task[old_idx].next_idx = nb_future_tasks
-
+                            //set the oprevious last task's 'pointer' to the new last task
                             
                         }
                         else do fmt.printfln("failed to add task, future_task_array has %d of %d slots used", nb_future_tasks, max_tasks)
@@ -334,28 +372,42 @@ main::proc(){
                     }
                     
                 }
-                else{
+                else{ //this happens if we want to replace the whole task chain 
+                    //first check if there is a task to replace
+                    if !isActivetask(array_current_task[selected_idx]) {
+                        array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common, selected_idx), 2*max_tasks, array_data_common[selected_idx].type}// 2*max_tasks is used to tell the system there is no future task
+                        fmt.println(array_current_task[selected_idx])
+                    }
+                    else{
                     new_idx := array_current_task[selected_idx].idx
                     old_idx := u16(selected_idx)
-                    for new_idx<max_tasks{// here we iterate over the chain of tasks and unordered remove them as we encounter them
+                    for new_idx<max_tasks {// here we iterate over the chain of tasks
                         old_idx=new_idx
                         new_idx = array_future_task[old_idx].next_idx
-                        last_task_prev_idx:u16
-                        if old_idx != u16(len(array_future_task)-1) {// if we are deleting the last
 
-                            last_task_prev_idx = array_future_task[len(array_future_task)-1].prev_idx //get the idx of the task that pointed to the last task
-                            array_future_task[last_task_prev_idx].next_idx = old_idx //give the new idx of the next task
-                            unordered_remove(&array_future_task, old_idx)
+                        if old_idx == u16(len(array_future_task)-1) {//check if the task we want to delete is the last in the array
+                            pop(&array_future_task)//we can simply pop it, as there is no other task chain that can be affected
                             
                         }
-                        else do pop(&array_future_task)
+                        else{
+                            //since we will be moving the last task in the array, we need to update the pointers of the task before and after it
+                            last_task_prev_idx := array_future_task[len(array_future_task)-1].prev_idx //get the idx of the task that pointed to the last task in the array
+                            array_future_task[last_task_prev_idx].next_idx = old_idx //give the new idx of the moved task
+                            last_task_next_idx := array_future_task[len(array_future_task)-1].next_idx
+                            if last_task_next_idx <max_tasks do array_future_task[last_task_next_idx].prev_idx = old_idx
+                            //the line above checks if the displaced task had a next task
+                            
+                            unordered_remove(&array_future_task, old_idx)
+                        }
                         
                     }
                     //overwrite the current task
-                    array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common[:], selected_idx), 2*max_tasks, array_data_common[selected_idx].type}// 2*max_tasks is used to tell the system there is no future task
+                    array_current_task[selected_idx] = {convertFuture2current(array_buffer_task[selected_idx], array_data_common, selected_idx), 2*max_tasks, array_data_common[selected_idx].type}// 2*max_tasks is used to tell the system there is no future task
+                }
                 }
                 set_buffer -={selected_idx}
             }
+            assert(card(set_buffer)==0, "set buffer wasn't cleared")
         }
 
 
@@ -372,6 +424,8 @@ main::proc(){
             II  update the relative data in the units data (ex: update position)
             III if any task is over && it points in array_future_tasks, overwrite current task with the data pointed to and unordered remove it
              
+
+        Ideally the code here will be remplaced with a polymorphiic function to simplyfy the code in main
         */
         
         // I
@@ -382,6 +436,7 @@ main::proc(){
                 case empty_task_data:
                     fmt.println("tried to tick a unit without task")
                 case move_task_data:
+                    //fmt.println("tried to move unit")
                     mvt_vec := v.wish-v.current
                     mvt_len := rl.Vector2Length(mvt_vec)
                     mvt_hat :=mvt_vec/mvt_len
@@ -402,11 +457,79 @@ main::proc(){
                     fmt.println("tried to tick a unit without task")
                 case move_task_data:
                     array_data_common[i].pos = v.current
+                    //fmt.printfln("tried to assign pos (%d, %d) to unit %d", v.current.x, v.current.y, i)
             }
         }
         // III
+        //this code will have my sanity I think
+        //hopefully I can reduce the if/else dance to something more reasonnable in the future 
+        if card(units_done)>0 do printFTA(array_future_task)
         for i in units_done{
+            
+            updateSlot(&array_current_task, &array_future_task, u16(i), array_data_common)
+            /*
+            //replace the current task
+            idx := u16(array_current_task[i].idx)
+            fmt.println("current task ptr")
+            fmt.println(idx)
+            fmt.println(array_future_task[:])/*
+            
+            k:=0
+            for idx<max_tasks{
+                fmt.printf("next task idx for task position %d in the chain and at idx %d in the array :", k, idx)
+                k+=1
 
+                idx = array_future_task[idx].next_idx
+                fmt.println(idx)
+            }*/
+
+
+
+            idx2free := array_current_task[i].idx
+            //assert(idx2free<u16(len(array_future_task)), "problem in defining next task from current")
+            if idx2free<max_tasks{
+                new_current_task_data := convertFuture2current(array_future_task[idx2free].data, array_data_common[:], i)
+                array_current_task[i] = container_task_data{new_current_task_data, array_future_task[idx2free].next_idx, array_data_common[i].type }
+                if !array_future_task[idx2free].prev_in_current do fmt.println("first future task in chain didn't think it was first")
+            }
+            
+            
+            //update the chain
+            next_idx := array_current_task[i].idx
+            if next_idx<max_tasks{  
+                array_future_task[next_idx].prev_idx = u16(i)
+                array_future_task[next_idx].prev_in_current = true
+            }
+            else {
+                array_current_task[i] = container_task_data{}
+                fmt.println("cleared task")
+            }
+            //remove the value moved in current task
+
+            if idx2free==u16(len(array_future_task)-1){//check if the task we want to remove is the last in array future tasks
+                pop(&array_future_task)
+            }
+            else{
+                last_task_prev_idx := array_future_task[len(array_future_task)-1].prev_idx //get the idx of the task that pointed to the last task in the array
+                if array_future_task[len(array_future_task)-1].prev_in_current{//last task in array points to task in current
+                    
+                    array_future_task[len(array_future_task)-1].prev_idx=u16(i)
+                    array_current_task[i].idx = idx2free
+                    fmt.printfln("next task idx given to current task : %d", idx2free)
+                    
+                }
+                else{
+                    array_future_task[last_task_prev_idx].next_idx = idx2free //give the new idx of the moved task
+                }
+                
+                last_task_next_idx := array_future_task[len(array_future_task)-1].next_idx
+                if last_task_next_idx <max_tasks do array_future_task[last_task_next_idx].prev_idx = idx2free
+                unordered_remove(&array_future_task, idx2free)
+            }
+
+            
+            
+        */    
         }
 
 
@@ -439,9 +562,7 @@ main::proc(){
         if (task_drag_in_progress && card(selection_set)>1 && interaction_mode_state ==.move) do drawMoveLine(task_drag_start_pos, mouse_pos, card(selection_set))
 
         for unit_idx in selection_set{
-            type:unit_type =.soldier
-            if unit_idx<max_vic do type =.vehicle
-            highlight(pos_array[unit_idx], type)
+            highlight(array_data_common[unit_idx].pos, array_data_common[unit_idx].type)
         }
         
 

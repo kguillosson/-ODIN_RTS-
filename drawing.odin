@@ -65,15 +65,15 @@ drawSelectionBox:: proc(origin, current_pos:rl.Vector2){
 
 
 
-highlight :: proc(pos2highlight : rl.Vector2, type2highlight : unit_type){
+highlight :: proc(pos2highlight : rl.Vector2, type2highlight : enum_type){
     radius_base:f32
     switch type2highlight{
-        case .any_type:
+        case .none:
             fmt.println("untyped thing to highlight, u fkd up") 
             return
-        case .soldier:
+        case .sld:
             radius_base = 30
-        case .vehicle:
+        case .vic:
             radius_base = 60
     }
     

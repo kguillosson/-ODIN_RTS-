@@ -59,7 +59,7 @@ MouseSelection :: proc(drag_start, drag_stop : rl.Vector2, array_data :[]common_
     else do new_selection_bitset = empty_unit_set
 
     if rl.Vector2Distance(drag_start, drag_stop)<drag_select_threshold{     //(II)
-        found, idx_selected := newSelectNearMouse(drag_stop, .none, array_data, selection_treshold)
+        found, idx_selected := SelectNearMouse(drag_stop, array_data, selection_treshold, set)
         if found do new_selection_bitset += {idx_selected}
 
     }
