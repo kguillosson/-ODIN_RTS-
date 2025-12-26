@@ -1,5 +1,6 @@
 package main
 
+import "core:slice"
 import rl "vendor:raylib"
 import "core:fmt"
 
@@ -63,7 +64,7 @@ convertFuture2current :: proc (input : union_future_task_data, array_data:[max_u
     return empty_task_data{}
 }
 
-isActivetask :: proc (task : container_task_data)->bool{
+isActiveTask :: proc (task : container_task_data)->bool{
     #partial switch v in task.data {
          case move_task_data:
             return true
@@ -71,13 +72,20 @@ isActivetask :: proc (task : container_task_data)->bool{
     return false
 }
 
+isActiveTaskFuture :: proc (task : container_future_task_data)->bool{
+    #partial switch v in task.data {
+         case move_future_task_data:
+            return true
+    }
+    return false
+}
 
 
 getWithTask :: proc(current_tasks :[max_units]container_task_data)->(ret_set : unit_set){
     for i:u8=0; i<max_units; i+=1{
        
 
-        if isActivetask(current_tasks[i]) do ret_set +={i}
+        if isActiveTask(current_tasks[i]) do ret_set +={i}
     }
     return
 }
@@ -120,7 +128,7 @@ updateSlot :: proc(array_current :^[max_units]container_task_data, array_future 
             removeTask(array_future, array_current, next_task_idx)
         }
         else{//now we are in the bothersome situation where there was a task after the one we made current
-            //update the next task in chain, tell it where it's previous is and that it's 1st in chai
+            //update the next task in chain, tell it where it's previous is and that it's 1st in chain
             array_future[array_current[slot].idx].prev_idx = slot
             array_future[array_current[slot].idx].prev_in_current = true
             removeTask(array_future, array_current, next_task_idx)
@@ -160,9 +168,106 @@ removeTask :: proc(array_future : ^[dynamic]container_future_task_data, array_cu
 
 }
 
+removeChain :: proc(array_future : ^[dynamic]container_future_task_data, array_current:^[max_units]container_task_data, idx : u16){
+    //here we want to remove all the tasks in the chain related to the unit idx
+    next_idx := array_current[idx].idx// idx of first task in related to unit in the future
+    current_idx :=idx
+    for next_idx <max_tasks{
+        current_idx = next_idx
+        next_idx = array_future[current_idx].next_idx
+        removeTask(array_future, array_current, current_idx)
+    }
+}
 
 
 
 
 
+//
+
+//New implementation
+//let's do a simpler approach where we don't try to have a densly packed array and accept the presence of holes
+
+//this finds the first free slot in the array
+FindFirstFreeSlot :: proc(array_future : ^[dynamic]container_future_task_data)->(u16, bool){
+    k :u16=0
+
+    for isActiveTaskFuture(array_future[k])&&k<u16(len(array_future)){
+        k+=1
+    }
+    if k<u16(len(array_future))-1 do return k, true
+    else do return k, false
+}
+
+// we suppose that the slot in current is filled
+Add2Future :: proc(array_future : ^[dynamic]container_future_task_data, array_current:^[max_units]container_task_data, data2add : union_future_task_data, idx : u16){
+    assert(isActiveTask(array_current[idx]), "tried to add a future without a present")
+    //find last task in chain for concerned idx
+    next_slot :u16=array_current[idx].idx
+    slot :u16= idx
+    prev_in_current := true
+    for next_slot <2*max_tasks{
+        slot = next_slot
+        next_slot = array_future[slot].next_idx
+        prev_in_current = false
+    }
+    free_slot, ok := FindFirstFreeSlot(array_future)
+    if !ok{
+        if free_slot<max_tasks-1{
+            append(array_future, container_future_task_data{data2add, 2*max_tasks, slot, prev_in_current, array_current[idx].type})
+            return
+        }
+        else do fmt.println("failed to add task")
+    }
+    else{
+        array_future[free_slot] = {data2add, 2*max_tasks, slot, prev_in_current, array_current[idx].type}
+    }
+}
+
+clearChain :: proc(array_future : ^[dynamic]container_future_task_data, array_current:^[max_units]container_task_data, idx : u16){
+    if !isActiveTask(array_current[idx]){
+        fmt.println("tried to empty an empty chain")
+        return
+    }  
+    slot :=idx
+    next_slot :=array_current[idx].idx
+    array_current[idx] = {}
+    k:=1
+    for next_slot <max_tasks{
+        slot = next_slot
+        next_slot = array_future[slot].next_idx
+        array_future[slot] = {}
+        k+=1
+    }
+    fmt.printfln("removed %d tasks in chain associated with slot %d", k, idx)
+    return
+}
+
+updateChain :: proc(array_future : ^[dynamic]container_future_task_data, array_current:^[max_units]container_task_data, idx : u16){
+
+}
+
+getFutureStorageData :: proc(array_future : [dynamic]container_future_task_data, array_current : [max_units]container_task_data)->(length, used_slots , lost_tasks:u16){
+    length = u16(len(array_future))
+    slots_explored := make([dynamic]u16, 0, max_tasks)
+    defer delete(slots_explored)
+    units_with_task:=getWithTask(array_current)
+    for idx in units_with_task{
+        current, next :u16 = u16(idx), array_current[idx].idx
+        for next <max_tasks{
+            current = next
+            next = array_future[current].next_idx
+            append(&slots_explored, current)
+        }
+    }
+    lost_tasks =0
+    used_slots = u16(len(slots_explored))
+    slice.sort(slots_explored[:])
+    for k:u16=0; k<used_slots-1; k+=1{
+        for j:=slots_explored[k]+1; j<slots_explored[k+1]; j+=1{
+            if isActiveTaskFuture(array_future[j]) do lost_tasks+=1
+        }
+    }
+    return
+}
 

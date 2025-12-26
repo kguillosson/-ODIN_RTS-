@@ -461,75 +461,11 @@ main::proc(){
             }
         }
         // III
-        //this code will have my sanity I think
-        //hopefully I can reduce the if/else dance to something more reasonnable in the future 
-        if card(units_done)>0 do printFTA(array_future_task)
+
         for i in units_done{
             
             updateSlot(&array_current_task, &array_future_task, u16(i), array_data_common)
-            /*
-            //replace the current task
-            idx := u16(array_current_task[i].idx)
-            fmt.println("current task ptr")
-            fmt.println(idx)
-            fmt.println(array_future_task[:])/*
             
-            k:=0
-            for idx<max_tasks{
-                fmt.printf("next task idx for task position %d in the chain and at idx %d in the array :", k, idx)
-                k+=1
-
-                idx = array_future_task[idx].next_idx
-                fmt.println(idx)
-            }*/
-
-
-
-            idx2free := array_current_task[i].idx
-            //assert(idx2free<u16(len(array_future_task)), "problem in defining next task from current")
-            if idx2free<max_tasks{
-                new_current_task_data := convertFuture2current(array_future_task[idx2free].data, array_data_common[:], i)
-                array_current_task[i] = container_task_data{new_current_task_data, array_future_task[idx2free].next_idx, array_data_common[i].type }
-                if !array_future_task[idx2free].prev_in_current do fmt.println("first future task in chain didn't think it was first")
-            }
-            
-            
-            //update the chain
-            next_idx := array_current_task[i].idx
-            if next_idx<max_tasks{  
-                array_future_task[next_idx].prev_idx = u16(i)
-                array_future_task[next_idx].prev_in_current = true
-            }
-            else {
-                array_current_task[i] = container_task_data{}
-                fmt.println("cleared task")
-            }
-            //remove the value moved in current task
-
-            if idx2free==u16(len(array_future_task)-1){//check if the task we want to remove is the last in array future tasks
-                pop(&array_future_task)
-            }
-            else{
-                last_task_prev_idx := array_future_task[len(array_future_task)-1].prev_idx //get the idx of the task that pointed to the last task in the array
-                if array_future_task[len(array_future_task)-1].prev_in_current{//last task in array points to task in current
-                    
-                    array_future_task[len(array_future_task)-1].prev_idx=u16(i)
-                    array_current_task[i].idx = idx2free
-                    fmt.printfln("next task idx given to current task : %d", idx2free)
-                    
-                }
-                else{
-                    array_future_task[last_task_prev_idx].next_idx = idx2free //give the new idx of the moved task
-                }
-                
-                last_task_next_idx := array_future_task[len(array_future_task)-1].next_idx
-                if last_task_next_idx <max_tasks do array_future_task[last_task_next_idx].prev_idx = idx2free
-                unordered_remove(&array_future_task, idx2free)
-            }
-
-            
-            
-        */    
         }
 
 
